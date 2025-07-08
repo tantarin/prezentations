@@ -38,11 +38,24 @@ class PresentationGenerator:
         presentations = []
         current_presentation = None
         current_slide = None
+        current_folder = None
+        expecting_folder_name = False
         
         lines = content.split('\n')
         
         for line in lines:
             line = line.strip()
+            
+            if line.startswith('##-FOLDER-START-##'):
+                # Начинаем новую папку - следующая непустая строка содержит название папки
+                expecting_folder_name = True
+                continue
+                
+            elif expecting_folder_name and line:
+                # Эта строка содержит название папки
+                current_folder = line
+                expecting_folder_name = False
+                continue
             
             if line.startswith('##-TOPIC-START-##'):
                 # Сохраняем предыдущую презентацию
@@ -56,7 +69,8 @@ class PresentationGenerator:
                     'title': '',
                     'level': '',
                     'module': '',
-                    'slides': []
+                    'slides': [],
+                    'folder': current_folder  # Добавляем информацию о папке
                 }
                 current_slide = None
                 
@@ -227,6 +241,18 @@ class PresentationGenerator:
         created_files = []
         
         for i, presentation_data in enumerate(presentations_data, 1):
+            # Определяем папку для презентации
+            folder_name = presentation_data.get('folder')
+            if folder_name:
+                # Создаем безопасное имя папки
+                safe_folder_name = re.sub(r'[^\w\s-]', '', folder_name).strip()
+                safe_folder_name = re.sub(r'[-\s]+', '_', safe_folder_name)
+                presentation_output_dir = os.path.join(output_dir, safe_folder_name)
+                # Создаем папку если её нет
+                os.makedirs(presentation_output_dir, exist_ok=True)
+            else:
+                presentation_output_dir = output_dir
+            
             # Создаем новую презентацию для каждой темы
             prs = Presentation()
             
@@ -251,7 +277,7 @@ class PresentationGenerator:
             safe_title = re.sub(r'[^\w\s-]', '', title).strip()
             safe_title = re.sub(r'[-\s]+', '_', safe_title)
             filename = f"presentation_{i:02d}_{safe_title}.pptx"
-            output_path = os.path.join(output_dir, filename)
+            output_path = os.path.join(presentation_output_dir, filename)
             
             # Сохраняем презентацию
             prs.save(output_path)
