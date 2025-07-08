@@ -132,40 +132,26 @@ class PresentationGenerator:
     
     def create_content_slide(self, prs, title, content_lines):
         """Создание слайда с содержимым"""
-        from pptx.util import Inches
-        
-        # Используем пустой макет слайда
-        slide_layout = prs.slide_layouts[6]  # Blank layout
+        slide_layout = prs.slide_layouts[1]  # Title and Content layout
         slide = prs.slides.add_slide(slide_layout)
 
-        # Создаем заголовок вручную
-        title_left = Inches(0.5)
-        title_top = Inches(0.5)
-        title_width = Inches(9)
-        title_height = Inches(1)
-        
-        title_shape = slide.shapes.add_textbox(title_left, title_top, title_width, title_height)
-        title_frame = title_shape.text_frame
-        title_frame.text = title
-        title_frame.paragraphs[0].font.size = self.subtitle_font_size
-        title_frame.paragraphs[0].font.color.rgb = self.title_color
-        title_frame.paragraphs[0].font.bold = True
-        title_frame.paragraphs[0].font.name = 'Calibri'
+        title_shape = slide.shapes.title
+        content_shape = slide.placeholders[1]
 
-        # Создаем текстовое поле для содержимого
-        content_left = Inches(0.5)
-        content_top = Inches(1.5)
-        content_width = Inches(9)
-        content_height = Inches(5.5)
-        
-        content_shape = slide.shapes.add_textbox(content_left, content_top, content_width, content_height)
+        title_shape.text = title
+        title_shape.text_frame.paragraphs[0].font.size = self.subtitle_font_size
+        title_shape.text_frame.paragraphs[0].font.color.rgb = self.title_color
+        title_shape.text_frame.paragraphs[0].font.bold = True
+        title_shape.text_frame.paragraphs[0].font.name = 'Calibri'
+
+        # Обработка содержимого
         text_frame = content_shape.text_frame
-        text_frame.clear()  # Очищаем текстовое поле
-
+        text_frame.clear()  # Очищаем плейсхолдер от стандартного текста и форматирования
+        
         in_code_block = False
         code_lines = []
         first_paragraph = True
-
+        
         for line in content_lines:
             if line.strip() == '[CODE_BLOCK]':
                 in_code_block = True
@@ -173,15 +159,16 @@ class PresentationGenerator:
                 continue
             elif line.strip() == '[/CODE_BLOCK]':
                 in_code_block = False
+                # Добавляем код блок
                 self.add_code_block(text_frame, code_lines)
                 code_lines = []
                 first_paragraph = False
                 continue
-
+            
             if in_code_block:
                 code_lines.append(line)
             else:
-                # Добавляем новый абзац для каждой строки контента
+                # Обычный текст
                 if first_paragraph:
                     p = text_frame.paragraphs[0]
                     first_paragraph = False
@@ -190,11 +177,23 @@ class PresentationGenerator:
                 
                 # Проверяем, является ли строка элементом списка
                 if line.strip().startswith('- '):
-                    # ЭТО ЭЛЕМЕНТ СПИСКА - добавляем маркер вручную
-                    p.text = "• " + line.strip()[2:]  # Заменяем "- " на "• "
+                    # ЭТО ЭЛЕМЕНТ СПИСКА - оставляем "- " как есть и делаем отступ
+                    p.text = line.strip()  # Оставляем "- " как есть
+                    p.level = 0  # Отключаем автоматические маркеры
+                    
+                    # Устанавливаем отступ, но НЕ отключаем маркеры для строк с "- "
+                    pPr = p._element.get_or_add_pPr()
+                    pPr.set('marL', '360000')  # Левый отступ
                 else:
-                    # ЭТО ОБЫЧНЫЙ АБЗАЦ
+                    # ЭТО ОБЫЧНЫЙ АБЗАЦ - отключаем маркеры только для обычных абзацев
                     p.text = line
+                    p.level = 0  # Отключаем автоматические маркеры
+                    
+                    # Полностью отключаем маркеры через XML только для обычных абзацев
+                    from lxml import etree
+                    pPr = p._element.get_or_add_pPr()
+                    # Добавляем элемент buNone для полного отключения маркеров
+                    buNone = etree.SubElement(pPr, '{http://schemas.openxmlformats.org/drawingml/2006/main}buNone')
 
                 # Применяем общие стили к тексту абзаца
                 p.font.size = self.content_font_size
